@@ -1,77 +1,156 @@
-import FormModal from "@/components/FormModal";
-import Pagination from "@/components/Pagination";
-import Table from "@/components/Table";
-import TableSearch from "@/components/TableSearch";
-import { role, subjectsData } from "@/lib/data";
-import Image from "next/image";
+"use client";
 
-type Subject = {
+import { useEffect, useState } from "react";
+import { DataGrid, GridColDef, GridRenderCellParams } from "@mui/x-data-grid";
+import Image from "next/image";
+import Link from "next/link";
+import FormModal from "@/components/FormModal";
+import { role } from "@/lib/data";
+import { Avatar, Box, Button, Typography } from "@mui/material";
+import { useTheme } from "@mui/material";
+import { tokens } from "../../../../../theme"; // ou ajuste o caminho
+import Table from "@/components/Table";
+import { useRouter } from "next/navigation";
+import Cookies from "js-cookie";
+
+type Course = {
   id: number;
+  courseId: string;
   name: string;
-  teachers: string[];
+  photo: string;
+  phone?: string;
+  code: string;
 };
 
-const columns = [
-  {
-    header: "Subject Name",
-    accessor: "name",
-  },
-  {
-    header: "Teachers",
-    accessor: "teachers",
-    className: "hidden md:table-cell",
-  },
-  {
-    header: "Actions",
-    accessor: "action",
-  },
-];
+const CourseListPage = () => {
+  const [courses, setCourses] = useState<Course[]>([]);
+  const theme = useTheme();
+  const colors = tokens(theme.palette.mode);
+  const router = useRouter();
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
 
-const SubjectListPage = () => {
-  const renderRow = (item: Subject) => (
-    <tr
-      key={item.id}
-      className="border-b border-gray-200 even:bg-slate-50 text-sm hover:bg-lamaPurpleLight"
-    >
-      <td className="flex items-center gap-4 p-4">{item.name}</td>
-      <td className="hidden md:table-cell">{item.teachers.join(",")}</td>
-      <td>
-        <div className="flex items-center gap-2">
+  useEffect(() => {
+    const fetchCourses = async () => {
+      try {
+        const token = Cookies.get("auth_token");
+
+        if (!token) {
+          router.push("/login");
+          return;
+        }
+
+        const response = await fetch("http://localhost:3030/course/getall", {
+          method: "GET",
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+        });
+
+        if (!response.ok) {
+          if (response.status === 401) {
+            Cookies.remove("auth_token");
+            router.push("/login");
+            return;
+          }
+
+          const errorData = await response.json();
+          throw new Error(errorData.error || "Erro ao buscar estudantes");
+        }
+
+        const data = await response.json();
+        console.log(data)
+
+        const formattedCourses: Course[] = data.map((s: any) => ({
+          id: s.id,
+          courseId: String(s.id),
+          name: s.name,
+          code: s.code,
+          photo: s.picture || "/default-avatar.png",
+        }));
+
+        setCourses(formattedCourses);
+      } catch (error) {
+        console.error("Erro ao buscar dados dos estudantes:", error);
+        setError(error instanceof Error ? error.message : "Erro desconhecido");
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchCourses();
+  }, [router]);
+
+  const columns: GridColDef[] = [
+    {
+      field: "name",
+      headerName: "Nome",
+      flex: 2,
+      renderCell: (params: GridRenderCellParams) => (
+        <Box display="flex" alignItems="center" height="100%" gap={1}>
+          <Avatar src={params.row.photo} sx={{ width: 32, height: 32 }} />
+          <Box>
+            <Typography variant="body2" fontWeight="bold">
+              {params.value}
+            </Typography>
+            <Typography variant="caption" color="gray">
+              {params.row.class}
+            </Typography>
+          </Box>
+        </Box>
+      ),
+    },
+    {
+      field: "code",
+      headerName: "Código",
+      flex: 1,
+    },
+
+    {
+      field: "actions",
+      headerName: "Ações",
+      flex: 0.5,
+      sortable: false,
+      filterable: false,
+      renderCell: (params: GridRenderCellParams) => (
+        <div className="flex items-center gap-2 h-12">
+          <Link href={`/list/subjects/${params.row.id}`}>
+            <button className="w-7 h-7 flex items-center justify-center rounded-full bg-lamaSky">
+              <Image src="/view.png" alt="" width={16} height={16} />
+            </button>
+          </Link>
           {role === "admin" && (
-            <>
-              <FormModal table="subject" type="update" data={item} />
-              <FormModal table="subject" type="delete" id={item.id} />
-            </>
+            <FormModal table="course" type="delete" id={params.row.id} />
           )}
         </div>
-      </td>
-    </tr>
-  );
+      ),
+    },
+  ];
 
   return (
-    <div className="bg-white p-4 rounded-md flex-1 m-4 mt-0">
-      {/* TOP */}
-      <div className="flex items-center justify-between">
-        <h1 className="hidden md:block text-lg font-semibold">Cursos</h1>
-        <div className="flex flex-col md:flex-row items-center gap-4 w-full md:w-auto">
-          <TableSearch />
-          <div className="flex items-center gap-4 self-end">
-            <button className="w-8 h-8 flex items-center justify-center rounded-full bg-lamaYellow">
-              <Image src="/filter.png" alt="" width={14} height={14} />
-            </button>
-            <button className="w-8 h-8 flex items-center justify-center rounded-full bg-lamaYellow">
-              <Image src="/sort.png" alt="" width={14} height={14} />
-            </button>
-            {role === "admin" && <FormModal table="teacher" type="create" />}
-          </div>
-        </div>
-      </div>
-      {/* LIST */}
-      <Table columns={columns} renderRow={renderRow} data={subjectsData} />
-      {/* PAGINATION */}
-      <Pagination />
-    </div>
+    <Box
+      p={3}
+      bgcolor="white"
+      borderRadius={2}
+      m={2}
+      sx={{
+      height: 'calc(100vh - 64px)', // altura total da viewport menos o header, ajuste se necessário
+      overflowY: 'auto'
+      }}
+    >
+      <Box display="flex" justifyContent="space-between" alignItems="center" mb={2}>
+        <Typography variant="h6" fontWeight="bold">
+          Cursos
+        </Typography>
+        {role === "admin" && (
+          <FormModal table="course" type="create" />
+        )}
+      </Box>
+
+      <Table rows={courses} columns={columns} />
+    </Box>
   );
 };
 
-export default SubjectListPage;
+export default CourseListPage;
